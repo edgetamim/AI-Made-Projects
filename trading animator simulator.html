@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Forex Price Chart</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;500&display=swap');
+        
+        body {
+            font-family: 'Roboto Mono', monospace;
+            background-color: #0f131d;
+            margin: 0;
+            padding: 20px;
+            color: #e0e0e0;
+            overflow: hidden;
+        }
+        
+        .chart-container {
+            width: 100%;
+            max-width: 1200px;
+            margin: 0 auto;
+            background-color: #161b26;
+            border: 1px solid #252d3d;
+        }
+        
+        .chart-header {
+            display: flex;
+            justify-content: space-between;
+            padding: 12px 16px;
+            border-bottom: 1px solid #252d3d;
+        }
+        
+        .price-info {
+            display: flex;
+            align-items: baseline;
+            gap: 12px;
+        }
+        
+        .pair-name {
+            font-size: 18px;
+            font-weight: 500;
+            color: #f5f5f5;
+        }
+        
+        .current-price {
+            font-size: 22px;
+            font-weight: 500;
+        }
+        
+        .price-up {
+            color: #26a69a;
+        }
+        
+        .price-down {
+            color: #ef5350;
+        }
+        
+        .price-change {
+            font-size: 14px;
+        }
+        
+        .chart-area {
+            position: relative;
+            height: 400px;
+        }
+        
+        #priceChart {
+            width: 100%;
+            height: 100%;
+        }
+        
+        .indicator-arrow {
+            position: absolute;
+            width: 10px;
+            height: 10px;
+            background-color: #26a69a;
+            transform: rotate(45deg);
+            z-index: 10;
+            pointer-events: none;
+            box-shadow: 0 0 0 2px rgba(38, 166, 154, 0.3);
+        }
+        
+        .grid-line {
+            position: absolute;
+            background-color: #252d3d;
+        }
+        
+        .horizontal-line {
+            width: 100%;
+            height: 1px;
+            left: 0;
+        }
+        
+        .vertical-line {
+            width: 1px;
+            height: 100%;
+            top: 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="chart-container">
+        <div class="chart-header">
+            <div class="price-info">
+                <span class="pair-name">EUR/USD</span>
+                <span class="current-price price-up" id="currentPrice">1.08542</span>
+                <span class="price-change price-up" id="priceChange">+0.0012 (0.11%)</span>
+            </div>
+        </div>
+        
+        <div class="chart-area">
+            <canvas id="priceChart"></canvas>
+            <div class="indicator-arrow" id="indicatorArrow"></div>
+        </div>
+    </div>
+
+    <script>
+        // Configuration
+        const config = {
+            dataPoints: 200,
+            basePrice: 1.0850,
+            priceRange: 0.0030,
+            volatility: 0.00015,
+            animationSpeed: 16 // ms per frame (~60fps)
+        };
+        
+        // Elements
+        const canvas = document.getElementById('priceChart');
+        const ctx = canvas.getContext('2d');
+        const priceElement = document.getElementById('currentPrice');
+        const changeElement = document.getElementById('priceChange');
+        const arrowElement = document.getElementById('indicatorArrow');
+        
+        // State
+        let data = [];
+        let width, height;
+        let lastFrameTime = 0;
+        
+        // Initialize
+        function init() {
+            resizeCanvas();
+            createGrid();
+            generateInitialData();
+            drawChart();
+            requestAnimationFrame(animate);
+            
+            window.addEventListener('resize', () => {
+                resizeCanvas();
+                createGrid();
+                drawChart();
+            });
+        }
+        
+        // Resize canvas
+        function resizeCanvas() {
+            const container = canvas.parentElement;
+            width = canvas.width = container.clientWidth;
+            height = canvas.height = container.clientHeight;
+        }
+        
+        // Create grid lines
+        function createGrid() {
+            // Remove existing grid lines
+            document.querySelectorAll('.grid-line').forEach(el => el.remove());
+            
+            // Horizontal grid lines
+            for (let i = 1; i <= 3; i++) {
+                const y = (height / 4) * i;
+                const line = document.createElement('div');
+                line.className = 'grid-line horizontal-line';
+                line.style.top = `${y}px`;
+                canvas.parentElement.appendChild(line);
+            }
+            
+            // Vertical grid lines
+            for (let i = 1; i <= 4; i++) {
+                const x = (width / 5) * i;
+                const line = document.createElement('div');
+                line.className = 'grid-line vertical-line';
+                line.style.left = `${x}px`;
+                canvas.parentElement.appendChild(line);
+            }
+        }
+        
+        // Generate initial data
+        function generateInitialData() {
+            data = [];
+            let currentPrice = config.basePrice;
+            
+            for (let i = 0; i < config.dataPoints; i++) {
+                currentPrice += (Math.random() - 0.5) * config.volatility * 2;
+                currentPrice = Math.max(
+                    config.basePrice - config.priceRange/2,
+                    Math.min(config.basePrice + config.priceRange/2, currentPrice)
+                );
+                data.push(currentPrice);
+            }
+        }
+        
+        // Draw the chart
+        function drawChart() {
+            // Clear canvas
+            ctx.clearRect(0, 0, width, height);
+            
+            // Draw price line
+            ctx.beginPath();
+            ctx.strokeStyle = '#4c8bf5';
+            ctx.lineWidth = 1.5;
+            
+            const step = width / (config.dataPoints - 1);
+            const priceToY = price => height - ((price - (config.basePrice - config.priceRange/2)) / config.priceRange * height);
+            
+            for (let i = 0; i < data.length; i++) {
+                const x = i * step;
+                const y = priceToY(data[i]);
+                
+                if (i === 0) {
+                    ctx.moveTo(x, y);
+                } else {
+                    ctx.lineTo(x, y);
+                }
+            }
+            
+            ctx.stroke();
+            
+            // Update arrow position
+            const lastIndex = data.length - 1;
+            const lastX = lastIndex * step;
+            const lastY = priceToY(data[lastIndex]);
+            
+            arrowElement.style.left = `${lastX - 5}px`;
+            arrowElement.style.top = `${lastY - 5}px`;
+        }
+        
+        // Update price display
+        function updatePriceDisplay() {
+            const currentPrice = data[data.length - 1];
+            const change = currentPrice - config.basePrice;
+            const percentChange = (change / config.basePrice) * 100;
+            
+            priceElement.textContent = currentPrice.toFixed(5);
+            changeElement.textContent = `${change >= 0 ? '+' : ''}${change.toFixed(4)} (${percentChange.toFixed(2)}%)`;
+            
+            if (change >= 0) {
+                priceElement.className = 'current-price price-up';
+                changeElement.className = 'price-change price-up';
+                arrowElement.style.backgroundColor = '#26a69a';
+                arrowElement.style.boxShadow = '0 0 0 2px rgba(38, 166, 154, 0.3)';
+            } else {
+                priceElement.className = 'current-price price-down';
+                changeElement.className = 'price-change price-down';
+                arrowElement.style.backgroundColor = '#ef5350';
+                arrowElement.style.boxShadow = '0 0 0 2px rgba(239, 83, 80, 0.3)';
+            }
+        }
+        
+        // Animation loop
+        function animate(timestamp) {
+            if (timestamp - lastFrameTime >= config.animationSpeed) {
+                // Shift data and add new point
+                data.shift();
+                
+                const lastPrice = data[data.length - 1];
+                let newPrice = lastPrice + (Math.random() - 0.5) * config.volatility * 2;
+                newPrice = Math.max(
+                    config.basePrice - config.priceRange/2,
+                    Math.min(config.basePrice + config.priceRange/2, newPrice)
+                );
+                data.push(newPrice);
+                
+                drawChart();
+                updatePriceDisplay();
+                
+                lastFrameTime = timestamp;
+            }
+            
+            requestAnimationFrame(animate);
+        }
+        
+        // Start when ready
+        document.addEventListener('DOMContentLoaded', init);
+    </script>
+</body>
+</html>
